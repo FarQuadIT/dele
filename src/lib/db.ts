@@ -17,7 +17,19 @@ function createClient() {
     );
   }
 
-  const ca = fs.existsSync(CA_PATH) ? fs.readFileSync(CA_PATH, "utf8") : undefined;
+  const caFromEnv = process.env.DATABASE_CA_CERT;
+  const caFromFile = fs.existsSync(CA_PATH)
+    ? fs.readFileSync(CA_PATH, "utf8")
+    : undefined;
+  const ca = caFromEnv || caFromFile;
+
+  // Временная диагностика: помогает понять, почему TLS-подключение к БД
+  // падает с "self-signed certificate" в проде (см. чат с деплоем на Timeweb).
+  console.log(
+    `[db] cwd=${process.cwd()} caPath=${CA_PATH} caFileExists=${fs.existsSync(CA_PATH)} ` +
+      `caFromEnv=${Boolean(caFromEnv)} caLength=${ca?.length ?? 0}`,
+  );
+
   const adapter = new PrismaPg({
     connectionString,
     ssl: ca ? { ca, rejectUnauthorized: true } : undefined,
