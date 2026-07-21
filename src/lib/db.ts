@@ -1,22 +1,27 @@
+import fs from "node:fs";
 import path from "node:path";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-/**
- * SQLite через libsql-адаптер (локальная разработка).
- * Переход на PostgreSQL: см. README → «Миграция на PostgreSQL»
- * (`@prisma/adapter-pg` + provider = "postgresql").
- */
-function createClient() {
-  const raw = process.env.DATABASE_URL ?? "file:./dev.db";
-  const filePath = raw.replace(/^file:/, "");
-  const url = path.isAbsolute(filePath)
-    ? `file:${filePath}`
-    : `file:${path.join(/* turbopackIgnore: true */ process.cwd(), filePath)}`;
+// Timeweb Cloud DBaaS маршрутизирует TLS по домену (SNI) и требует свой корневой
+// сертификат для полной проверки цепочки — см. вкладку «Подключение» базы.
+const CA_PATH = path.join(process.cwd(), "prisma/certs/timeweb-ca.crt");
 
-  const adapter = new PrismaLibSql({ url });
+function createClient() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL не задан (см. .env / переменные окружения приложения)",
+    );
+  }
+
+  const ca = fs.existsSync(CA_PATH) ? fs.readFileSync(CA_PATH, "utf8") : undefined;
+  const adapter = new PrismaPg({
+    connectionString,
+    ssl: ca ? { ca, rejectUnauthorized: true } : undefined,
+  });
   return new PrismaClient({ adapter });
 }
 

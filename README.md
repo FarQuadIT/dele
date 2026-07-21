@@ -2,9 +2,12 @@
 
 Цифровая платформа полного жизненного цикла инженерных систем зданий: цифровой профиль объекта, заявки, отклики, заказы, этапы работ, технадзор и споры.
 
-Стек: **Next.js 16** · TypeScript · Tailwind · shadcn/ui · Prisma · SQLite · Auth.js · React Three Fiber · Motion · Lenis.
+Стек: **Next.js 16** · TypeScript · Tailwind · shadcn/ui · Prisma · PostgreSQL · Auth.js · React Three Fiber · Motion · Lenis.
 
 ## Быстрый старт
+
+1. Задайте `DATABASE_URL` в `.env` (строка подключения PostgreSQL — см. «Деплой на Timeweb Cloud» ниже).
+2. Установите зависимости и примените миграции:
 
 ```bash
 npm install
@@ -50,16 +53,20 @@ Prisma Studio: `npm run db:studio` → [http://localhost:5555](http://localhost:
 
 Повтор с тем же `externalId` возвращает `{ duplicate: true }` без двойного списания.
 
-## Миграция на PostgreSQL
+## База данных
 
-1. Установите адаптер: `npm i @prisma/adapter-pg pg`
-2. В `prisma/schema.prisma` смените `provider = "sqlite"` → `provider = "postgresql"`
-3. В `.env`: `DATABASE_URL="postgresql://user:pass@localhost:5432/dele"`
-4. Обновите `src/lib/db.ts` — создавайте клиент через `PrismaPg` вместо `PrismaLibSql`
-5. `npx prisma migrate deploy` (или `migrate dev` для новой БД)
-6. `npm run db:seed`
+Используется PostgreSQL через адаптер `@prisma/adapter-pg`. Строка подключения — в `.env` (`DATABASE_URL="postgresql://user:pass@host:5432/db"`).
 
-Логика приложения от провайдера не зависит — меняется только адаптер и URL.
+Если провайдер маршрутизирует TLS по домену и требует свой корневой сертификат (как Timeweb Cloud DBaaS), положите его в `prisma/certs/timeweb-ca.crt` — `src/lib/db.ts`, `prisma/seed.ts` и `prisma/verify.ts` подхватят его автоматически для полной проверки цепочки (`sslmode=verify-full`). Если файла нет — соединение идёт без явной настройки TLS (провайдер сам решает через параметры URL).
+
+## Деплой на Timeweb Cloud (App Platform)
+
+1. **База данных**: создайте кластер PostgreSQL в разделе «Базы данных» (регион — тот же, что у приложения; SSR у Next.js на Timeweb доступен только в Москве и Амстердаме). Скопируйте строку подключения по домену (не по голому IP — у Timeweb TLS маршрутизируется по SNI) с вкладки «Подключение» и сохраните корневой сертификат в `prisma/certs/timeweb-ca.crt`.
+2. **Приложение**: в App Platform подключите репозиторий, фреймворк — Next.js, включите SSR.
+   - Команда сборки: `npx prisma generate && npm run build`
+   - Команда запуска: `npx prisma migrate deploy && npm start`
+   - Переменные окружения: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true`
+3. При первом деплое миграции применятся автоматически. Сид демо-данными (`npm run db:seed`) запускается вручную одноразово (не как часть команды запуска — иначе демо-данные будут пересоздаваться при каждом перезапуске).
 
 ## Скрипты
 

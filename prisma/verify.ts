@@ -1,9 +1,14 @@
+import "dotenv/config";
+import fs from "node:fs";
 import path from "node:path";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 
-const adapter = new PrismaLibSql({
-  url: `file:${path.join(process.cwd(), "dev.db")}`,
+const caPath = path.join(process.cwd(), "prisma/certs/timeweb-ca.crt");
+const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL!,
+  ssl: ca ? { ca, rejectUnauthorized: true } : undefined,
 });
 const db = new PrismaClient({ adapter });
 

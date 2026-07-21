@@ -88,8 +88,8 @@ export default async function AdminSettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Демо-режим</CardTitle>
             <CardDescription>
-              Платформа работает на локальной SQLite с мок-платежами. Миграция
-              на PostgreSQL и реальный эквайринг запланированы в Phase 6.
+              Платформа работает на PostgreSQL с мок-платежами. Реальный
+              эквайринг запланирован в Phase 6.
             </CardDescription>
           </CardHeader>
         </Card>
