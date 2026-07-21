@@ -1,0 +1,914 @@
+// DELE — схема данных ядра (Concept.txt §12).
+// «Объект» из концепции назван Facility (Object конфликтует с глобальным типом TS).
+// Деньги храним в копейках (Int, minor units).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================= ENUMS =============================
+
+enum UserRole {
+  CUSTOMER
+  CONTRACTOR
+  ADMIN
+}
+
+enum OrgMemberRole {
+  OWNER
+  MANAGER
+  EMPLOYEE
+}
+
+enum OrgVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum FacilityType {
+  HOUSE
+  APARTMENT
+  COMMERCIAL
+  OTHER
+}
+
+enum FacilityAccessRole {
+  OWNER
+  REPRESENTATIVE
+  VIEWER
+}
+
+enum SystemType {
+  WATER
+  DRAINAGE
+  HEATING
+  AIR
+  ELECTRICITY
+  AUTOMATION
+  OTHER
+}
+
+// Сценарии заявки (Concept.txt §5)
+enum RequestType {
+  PROFILE_FILL
+  DESIGN
+  INSTALLATION
+  RETROFIT
+  REPAIR
+  EMERGENCY
+  SERVICE_ONE_TIME
+  SERVICE_RECURRING
+  MATERIALS
+}
+
+// Статусы заявки (Concept.txt §6) — отдельно от статусов заказа!
+enum RequestStatus {
+  DRAFT
+  MODERATION
+  PUBLISHED
+  HAS_OFFERS
+  CONTRACTOR_SELECTED
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
+// Статусы заказа (Concept.txt §6)
+enum OrderStatus {
+  AWAITING_CONTRACT
+  AWAITING_PREPAYMENT
+  PLANNING
+  IN_PROGRESS
+  PAUSED
+  AWAITING_ACCEPTANCE
+  REWORK
+  INSPECTION
+  DISPUTE
+  AWAITING_FINAL_PAYMENT
+  COMPLETED
+  CANCELLED
+}
+
+enum StageStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  FAILED
+}
+
+enum EvidenceType {
+  PHOTO
+  VIDEO
+  FILE
+  NOTE
+}
+
+enum DocumentCategory {
+  EQUIPMENT_PASSPORT
+  SCHEME
+  CONTRACT
+  ESTIMATE
+  ACT
+  CERTIFICATE
+  WARRANTY
+  PHOTO
+  REPORT
+  OTHER
+}
+
+enum PaymentKind {
+  PREPAYMENT
+  FINAL
+  ADDITIONAL
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum InspectionStatus {
+  REQUESTED
+  IN_PROGRESS
+  PASSED
+  ISSUES_FOUND
+  CANCELLED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_CUSTOMER
+  RESOLVED_CONTRACTOR
+  RESOLVED_COMPROMISE
+  CLOSED
+}
+
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CLARIFICATION
+}
+
+enum RecommendationStatus {
+  ACTIVE
+  POSTPONED
+  DISMISSED
+  CONVERTED
+}
+
+enum RecommendationSeverity {
+  INFO
+  ADVISORY
+  IMPORTANT
+  CRITICAL
+}
+
+enum ReviewDirection {
+  CUSTOMER_TO_CONTRACTOR
+  CONTRACTOR_TO_CUSTOMER
+}
+
+enum NotificationKind {
+  SYSTEM
+  REQUEST
+  OFFER
+  ORDER
+  PAYMENT
+  CHAT
+  RECOMMENDATION
+}
+
+enum UrgencyLevel {
+  LOW
+  NORMAL
+  HIGH
+  EMERGENCY
+}
+
+enum ThreadKind {
+  REQUEST
+  OFFER
+  ORDER
+  SUPPORT
+}
+
+// ======================= ПОЛЬЗОВАТЕЛИ И ДОСТУП =======================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?  @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  role         UserRole @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  memberships       OrganizationMember[]
+  facilityAccess    FacilityAccess[]
+  facilitiesOwned   Facility[]              @relation("FacilityOwner")
+  requests          Request[]
+  offersAuthored    Offer[]
+  orderParticipants OrderParticipant[]
+  messages          Message[]
+  documentsUploaded DocumentVersion[]
+  stageEvidence     StageEvidence[]
+  proposalsAuthored ProfileChangeProposal[] @relation("ProposalAuthor")
+  proposalsDecided  ProfileChangeProposal[] @relation("ProposalDecider")
+  inspections       Inspection[]
+  disputesOpened    Dispute[]
+  reviewsAuthored   Review[]                @relation("ReviewAuthor")
+  reviewsReceived   Review[]                @relation("ReviewTargetUser")
+  notifications     Notification[]
+  auditEvents       AuditEvent[]
+  equipmentVersions EquipmentVersion[]
+  recommendations   ServiceRecommendation[]
+}
+
+// Auth.js (NextAuth v5) — стандартные модели адаптера
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Organization {
+  id                 String                @id @default(cuid())
+  name               String
+  slug               String                @unique
+  inn                String?               @unique
+  description        String?
+  logoUrl            String?
+  website            String?
+  phone              String?
+  email              String?
+  regionsServed      Json?
+  specializations    Json?
+  verificationStatus OrgVerificationStatus @default(UNVERIFIED)
+  verifiedAt         DateTime?
+  verificationNote   String?
+  ratingAvg          Float                 @default(0)
+  ratingCount        Int                   @default(0)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  members         OrganizationMember[]
+  offers          Offer[]
+  orders          Order[]
+  documents       Document[]
+  reviewsReceived Review[]                @relation("ReviewTargetOrg")
+  proposals       ProfileChangeProposal[]
+  recommendations ServiceRecommendation[]
+}
+
+model OrganizationMember {
+  id             String        @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgMemberRole @default(EMPLOYEE)
+  position       String?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+// ======================= ОБЪЕКТ И ЦИФРОВОЙ ПРОФИЛЬ =======================
+
+model Facility {
+  id          String       @id @default(cuid())
+  ownerId     String
+  title       String
+  type        FacilityType @default(HOUSE)
+  address     String
+  region      String?
+  area        Float?
+  floorsCount Int?
+  buildYear   Int?
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  owner           User                    @relation("FacilityOwner", fields: [ownerId], references: [id])
+  access          FacilityAccess[]
+  buildings       Building[]
+  systems         EngineeringSystem[]
+  equipment       Equipment[]
+  requests        Request[]
+  orders          Order[]
+  documents       Document[]
+  recommendations ServiceRecommendation[]
+  proposals       ProfileChangeProposal[]
+}
+
+model FacilityAccess {
+  id          String             @id @default(cuid())
+  facilityId  String
+  userId      String
+  role        FacilityAccessRole @default(VIEWER)
+  invitedById String?
+  expiresAt   DateTime?
+  createdAt   DateTime           @default(now())
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, userId])
+}
+
+model Building {
+  id         String   @id @default(cuid())
+  facilityId String
+  name       String
+  createdAt  DateTime @default(now())
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  floors   Floor[]
+}
+
+model Floor {
+  id         String   @id @default(cuid())
+  buildingId String
+  number     Int
+  name       String?
+  createdAt  DateTime @default(now())
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  zones    Zone[]
+
+  @@unique([buildingId, number])
+}
+
+model Zone {
+  id        String   @id @default(cuid())
+  floorId   String
+  name      String
+  createdAt DateTime @default(now())
+
+  floor     Floor       @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  equipment Equipment[]
+}
+
+model EngineeringSystem {
+  id         String     @id @default(cuid())
+  facilityId String
+  type       SystemType
+  name       String
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  facility        Facility                @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  subsystems      Subsystem[]
+  equipment       Equipment[]
+  requests        Request[]
+  recommendations ServiceRecommendation[]
+}
+
+model Subsystem {
+  id        String   @id @default(cuid())
+  systemId  String
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  system    EngineeringSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  equipment Equipment[]
+}
+
+model Equipment {
+  id                  String    @id @default(cuid())
+  facilityId          String
+  systemId            String?
+  subsystemId         String?
+  zoneId              String?
+  name                String
+  brand               String?
+  model               String?
+  serialNumber        String?
+  installedAt         DateTime?
+  warrantyUntil       DateTime?
+  serviceIntervalDays Int?
+  lastServiceAt       DateTime?
+  specs               Json?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  facility        Facility                @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  system          EngineeringSystem?      @relation(fields: [systemId], references: [id])
+  subsystem       Subsystem?              @relation(fields: [subsystemId], references: [id])
+  zone            Zone?                   @relation(fields: [zoneId], references: [id])
+  versions        EquipmentVersion[]
+  documents       Document[]
+  recommendations ServiceRecommendation[]
+  requests        Request[]
+  proposals       ProfileChangeProposal[]
+}
+
+// Версия данных оборудования: автор, дата, заказ-основание, снимок данных
+model EquipmentVersion {
+  id          String   @id @default(cuid())
+  equipmentId String
+  version     Int
+  data        Json
+  authorId    String?
+  orderId     String?
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  author    User?     @relation(fields: [authorId], references: [id])
+  order     Order?    @relation(fields: [orderId], references: [id])
+
+  @@unique([equipmentId, version])
+}
+
+model ServiceRecommendation {
+  id              String                 @id @default(cuid())
+  facilityId      String
+  equipmentId     String?
+  systemId        String?
+  title           String
+  reason          String?
+  severity        RecommendationSeverity @default(ADVISORY)
+  status          RecommendationStatus   @default(ACTIVE)
+  dueAt           DateTime?
+  lastServiceAt   DateTime?
+  createdByUserId String?
+  createdByOrgId  String?
+  sourceOrderId   String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  facility      Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  equipment     Equipment?         @relation(fields: [equipmentId], references: [id])
+  system        EngineeringSystem? @relation(fields: [systemId], references: [id])
+  createdByUser User?              @relation(fields: [createdByUserId], references: [id])
+  createdByOrg  Organization?      @relation(fields: [createdByOrgId], references: [id])
+  sourceOrder   Order?             @relation(fields: [sourceOrderId], references: [id])
+}
+
+// ============================= СДЕЛКА =============================
+
+model Request {
+  id              String        @id @default(cuid())
+  customerId      String
+  facilityId      String
+  systemId        String?
+  equipmentId     String?
+  type            RequestType
+  status          RequestStatus @default(DRAFT)
+  title           String
+  description     String?
+  desiredDateFrom DateTime?
+  desiredDateTo   DateTime?
+  visitTimeNote   String?
+  budgetMin       Int?
+  budgetMax       Int?
+  urgency         UrgencyLevel  @default(NORMAL)
+  needsEstimate   Boolean       @default(true)
+  needsContract   Boolean       @default(true)
+  needsWarranty   Boolean       @default(false)
+  contactName     String?
+  contactPhone    String?
+  moderationNote  String?
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Инвариант: у заявки максимум один принятый отклик
+  acceptedOfferId String? @unique
+
+  customer      User                @relation(fields: [customerId], references: [id])
+  facility      Facility            @relation(fields: [facilityId], references: [id])
+  system        EngineeringSystem?  @relation(fields: [systemId], references: [id])
+  equipment     Equipment?          @relation(fields: [equipmentId], references: [id])
+  acceptedOffer Offer?              @relation("AcceptedOffer", fields: [acceptedOfferId], references: [id])
+  offers        Offer[]
+  attachments   RequestAttachment[]
+  order         Order?
+  threads       ChatThread[]
+  documents     Document[]
+}
+
+model RequestAttachment {
+  id        String   @id @default(cuid())
+  requestId String
+  fileName  String
+  fileUrl   String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model Offer {
+  id              String      @id @default(cuid())
+  requestId       String
+  organizationId  String
+  authorId        String
+  status          OfferStatus @default(SENT)
+  priceTotal      Int
+  priceMaterials  Int?
+  isEstimate      Boolean     @default(false)
+  durationDays    Int?
+  validUntil      DateTime?
+  warrantyMonths  Int?
+  paymentSchedule Json?
+  stagesPlan      Json?
+  exclusions      String?
+  comment         String?
+  availableDates  Json?
+  currentVersion  Int         @default(1)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  request            Request        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  organization       Organization   @relation(fields: [organizationId], references: [id])
+  author             User           @relation(fields: [authorId], references: [id])
+  versions           OfferVersion[]
+  acceptedForRequest Request?       @relation("AcceptedOffer")
+  order              Order?
+  threads            ChatThread[]
+
+  @@unique([requestId, organizationId])
+}
+
+// Принятый отклик неизменяем: фиксируем снимки версий
+model OfferVersion {
+  id        String   @id @default(cuid())
+  offerId   String
+  version   Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, version])
+}
+
+model Order {
+  id                 String      @id @default(cuid())
+  number             String      @unique
+  requestId          String      @unique
+  offerId            String      @unique
+  customerId         String
+  organizationId     String
+  facilityId         String
+  status             OrderStatus @default(AWAITING_CONTRACT)
+  priceTotal         Int
+  prepaymentAmount   Int?
+  scheduledStartAt   DateTime?
+  scheduledEndAt     DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  addressRevealed    Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  request           Request                 @relation(fields: [requestId], references: [id])
+  offer             Offer                   @relation(fields: [offerId], references: [id])
+  organization      Organization            @relation(fields: [organizationId], references: [id])
+  facility          Facility                @relation(fields: [facilityId], references: [id])
+  participants      OrderParticipant[]
+  stages            OrderStage[]
+  documents         Document[]
+  payments          Payment[]
+  contract          Contract?
+  inspections       Inspection[]
+  disputes          Dispute[]
+  threads           ChatThread[]
+  proposals         ProfileChangeProposal[]
+  reviews           Review[]
+  equipmentVersions EquipmentVersion[]
+  recommendations   ServiceRecommendation[]
+}
+
+model OrderParticipant {
+  id        String   @id @default(cuid())
+  orderId   String
+  userId    String
+  roleNote  String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([orderId, userId])
+}
+
+model OrderStage {
+  id          String      @id @default(cuid())
+  orderId     String
+  index       Int
+  name        String
+  status      StageStatus @default(PENDING)
+  plannedAt   DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  failReason  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  order    Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  evidence StageEvidence[]
+
+  @@unique([orderId, index])
+}
+
+model StageEvidence {
+  id          String       @id @default(cuid())
+  stageId     String
+  type        EvidenceType
+  fileUrl     String?
+  note        String?
+  createdById String
+  createdAt   DateTime     @default(now())
+
+  stage     OrderStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  createdBy User       @relation(fields: [createdById], references: [id])
+}
+
+// ============================= СОПРОВОЖДЕНИЕ =============================
+
+// Чат привязан к заявке, отклику или заказу — не существует сам по себе
+model ChatThread {
+  id        String     @id @default(cuid())
+  kind      ThreadKind
+  requestId String?
+  offerId   String?
+  orderId   String?
+  createdAt DateTime   @default(now())
+
+  request  Request?  @relation(fields: [requestId], references: [id])
+  offer    Offer?    @relation(fields: [offerId], references: [id])
+  order    Order?    @relation(fields: [orderId], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  threadId    String
+  authorId    String
+  body        String
+  attachments Json?
+  createdAt   DateTime @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User       @relation(fields: [authorId], references: [id])
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  category       DocumentCategory @default(OTHER)
+  title          String
+  facilityId     String?
+  equipmentId    String?
+  requestId      String?
+  orderId        String?
+  organizationId String?
+  currentVersion Int              @default(1)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  facility     Facility?         @relation(fields: [facilityId], references: [id])
+  equipment    Equipment?        @relation(fields: [equipmentId], references: [id])
+  request      Request?          @relation(fields: [requestId], references: [id])
+  order        Order?            @relation(fields: [orderId], references: [id])
+  organization Organization?     @relation(fields: [organizationId], references: [id])
+  versions     DocumentVersion[]
+  contract     Contract?
+  inspection   Inspection?
+}
+
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  version      Int
+  fileUrl      String
+  fileName     String
+  fileSize     Int?
+  mimeType     String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+
+  @@unique([documentId, version])
+}
+
+model Contract {
+  id                     String    @id @default(cuid())
+  orderId                String    @unique
+  documentId             String?   @unique
+  terms                  Json?
+  signedByCustomerAt     DateTime?
+  signedByContractorAt   DateTime?
+  createdAt              DateTime  @default(now())
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  document Document? @relation(fields: [documentId], references: [id])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  orderId        String
+  kind           PaymentKind
+  status         PaymentStatus @default(PENDING)
+  amount         Int
+  currency       String        @default("RUB")
+  externalId     String?       @unique
+  idempotencyKey String?       @unique
+  paidAt         DateTime?
+  failReason     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  refunds Refund[]
+}
+
+model Refund {
+  id         String       @id @default(cuid())
+  paymentId  String
+  amount     Int
+  status     RefundStatus @default(PENDING)
+  reason     String?
+  externalId String?      @unique
+  createdAt  DateTime     @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+}
+
+model Inspection {
+  id               String           @id @default(cuid())
+  orderId          String
+  status           InspectionStatus @default(REQUESTED)
+  requestedById    String
+  inspectorName    String?
+  scheduledAt      DateTime?
+  conclusion       String?
+  reportDocumentId String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  order          Order     @relation(fields: [orderId], references: [id])
+  requestedBy    User      @relation(fields: [requestedById], references: [id])
+  reportDocument Document? @relation(fields: [reportDocumentId], references: [id])
+}
+
+model Dispute {
+  id          String        @id @default(cuid())
+  orderId     String
+  status      DisputeStatus @default(OPEN)
+  openedById  String
+  subject     String
+  description String?
+  resolution  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  order    Order @relation(fields: [orderId], references: [id])
+  openedBy User  @relation(fields: [openedById], references: [id])
+}
+
+// Исполнитель предлагает изменения профиля — заказчик подтверждает
+model ProfileChangeProposal {
+  id              String         @id @default(cuid())
+  facilityId      String
+  equipmentId     String?
+  orderId         String?
+  authorId        String
+  authorOrgId     String?
+  status          ProposalStatus @default(PENDING)
+  changes         Json
+  comment         String?
+  decisionComment String?
+  decidedById     String?
+  decidedAt       DateTime?
+  createdAt       DateTime       @default(now())
+
+  facility  Facility      @relation(fields: [facilityId], references: [id])
+  equipment Equipment?    @relation(fields: [equipmentId], references: [id])
+  order     Order?        @relation(fields: [orderId], references: [id])
+  author    User          @relation("ProposalAuthor", fields: [authorId], references: [id])
+  authorOrg Organization? @relation(fields: [authorOrgId], references: [id])
+  decidedBy User?         @relation("ProposalDecider", fields: [decidedById], references: [id])
+}
+
+// Отзыв — только по завершённому заказу; направление фиксировано
+model Review {
+  id           String          @id @default(cuid())
+  orderId      String
+  direction    ReviewDirection
+  authorId     String
+  targetUserId String?
+  targetOrgId  String?
+  rating       Int
+  text         String?
+  createdAt    DateTime        @default(now())
+
+  order      Order         @relation(fields: [orderId], references: [id])
+  author     User          @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetUser User?         @relation("ReviewTargetUser", fields: [targetUserId], references: [id])
+  targetOrg  Organization? @relation("ReviewTargetOrg", fields: [targetOrgId], references: [id])
+
+  @@unique([orderId, direction])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind @default(SYSTEM)
+  title     String
+  body      String?
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Журнал критических действий
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+}
