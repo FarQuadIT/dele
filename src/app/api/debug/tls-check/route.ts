@@ -48,7 +48,7 @@ function sslRequestHandshake(host: string, port: number): Promise<net.Socket> {
   });
 }
 
-function describeCert(cert: tls.PeerCertificate) {
+function describeCert(cert: tls.DetailedPeerCertificate) {
   return {
     subject: cert.subject,
     issuer: cert.issuer,
@@ -101,7 +101,7 @@ export async function GET(req: Request) {
     });
 
     const chain: ReturnType<typeof describeCert>[] = [];
-    let current: tls.PeerCertificate | undefined = secure.getPeerCertificate(true);
+    let current: tls.DetailedPeerCertificate | undefined = secure.getPeerCertificate(true);
     const seen = new Set<string>();
     while (current && Object.keys(current).length && !seen.has(current.fingerprint256)) {
       seen.add(current.fingerprint256);
