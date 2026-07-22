@@ -26,9 +26,18 @@ export async function proxy(req: NextRequest) {
 
   if (!area && !isAuthPage) return NextResponse.next();
 
+  // Auth.js подписывает cookie как __Secure-authjs.session-token за HTTPS
+  // (см. useSecureCookies в @auth/core). getToken() сам не умеет читать
+  // X-Forwarded-Proto от Caddy, поэтому за прокси всегда считает соединение
+  // HTTP и ищет cookie без префикса — из-за этого токен никогда не находился.
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const protocol = forwardedProto ?? req.nextUrl.protocol.replace(/:$/, "");
+  const secureCookie = protocol === "https";
+
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET,
+    secureCookie,
   });
 
   // Гость в защищённой зоне -> на вход с возвратом
