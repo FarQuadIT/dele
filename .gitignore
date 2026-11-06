@@ -47,3 +47,15 @@ next-env.d.ts
 /prisma/dev.db-journal
 /dev.db
 /dev.db-journal
+
+/vendor/
+/storage/*.key
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/bootstrap/cache/*.php
+/public/build/
+/database/*.sqlite
+!.env.example
+/.phpunit.result.cache

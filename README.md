@@ -1,93 +1,88 @@
 # DELE
 
-Цифровая платформа полного жизненного цикла инженерных систем зданий: цифровой профиль объекта, заявки, отклики, заказы, этапы работ, технадзор и споры.
+Платформа обслуживания инженерных систем зданий. **Laravel 13 + Inertia 2 + React 19**, TypeScript, Tailwind 4, PostgreSQL. React-компоненты и 3D-сцена перенесены из GitHub `main` (`42c8926`) с сохранением адресов страниц. Node.js нужен для сборки интерфейса; на сервере работают Nginx и PHP-FPM.
 
-Стек: **Next.js 16** · TypeScript · Tailwind · shadcn/ui · Prisma · PostgreSQL · Auth.js · React Three Fiber · Motion · Lenis.
+Адрес: [https://176.118.222.21](https://176.118.222.21). Ветка: `codex/laravel-fatmetal`. Эта версия не использует старые сервисы Timeweb.
 
-## Быстрый старт
+## Разработка
 
-1. Задайте `DATABASE_URL` в `.env` (строка подключения PostgreSQL — см. «Деплой на Timeweb Cloud» ниже).
-2. Установите зависимости и примените миграции:
+Нужны PHP 8.3+ (на сервере 8.4), Composer 2, Node.js 22+, расширения PHP `mbstring`, `xml`, `curl`, `intl`, `pdo_pgsql` / `pdo_sqlite`. В production используется PostgreSQL; SQLite подходит для локальной разработки и быстрых тестов.
 
 ```bash
-npm install
-npx prisma migrate deploy
-npm run db:seed
+composer install
+cp .env.example .env
+php artisan key:generate
+touch database/database.sqlite
+php artisan migrate
+npm ci
 npm run dev
 ```
 
-Откройте [http://localhost:3000](http://localhost:3000).
+Во втором терминале: `php artisan serve`. Открыть `http://localhost:8000`. Для PostgreSQL заполнить стандартные `DB_*` в `.env`. `DATABASE_URL`, Auth.js и Prisma больше не нужны. `.env` не коммитить. В Windows файл SQLite можно создать командой `New-Item database/database.sqlite -ItemType File`.
 
-### Демо-аккаунты (после сида)
+## Пользователи
 
-| Роль        | Email                   | Пароль     |
-|-------------|-------------------------|------------|
-| Заказчик    | `customer@dele.ru`      | `demo1234` |
-| Исполнитель | `contractor@dele.ru`    | `demo1234` |
-| Админ       | `admin@dele.ru`         | `demo1234` |
-
-Prisma Studio: `npm run db:studio` → [http://localhost:5555](http://localhost:5555).
-
-## Структура
-
-- `src/app/(public)` — лендинг и публичные страницы
-- `src/app/(customer)/app/customer` — кабинет заказчика
-- `src/app/(contractor)/app/contractor` — кабинет исполнителя
-- `src/app/(admin)/admin` — панель администратора
-- `src/app/api/payments/webhook` — идемпотентный вебхук платежей
-- `prisma/` — схема, миграции, сид
-
-## Платежный вебхук
-
-`POST /api/payments/webhook`
-
-```json
-{
-  "event": "payment.succeeded",
-  "externalId": "yk_123",
-  "idempotencyKey": "<order-request-id>-final",
-  "paymentId": "<optional Payment.id>",
-  "amount": 150000
-}
-```
-
-Повтор с тем же `externalId` возвращает `{ duplicate: true }` без двойного списания.
-
-## База данных
-
-Используется PostgreSQL через адаптер `@prisma/adapter-pg`. Строка подключения — в `.env` (`DATABASE_URL="postgresql://user:pass@host:5432/db"`).
-
-Если провайдер маршрутизирует TLS по домену и требует свой корневой сертификат (как Timeweb Cloud DBaaS), положите его в `prisma/certs/timeweb-ca.crt` — `src/lib/db.ts`, `prisma/seed.ts` и `prisma/verify.ts` подхватят его автоматически для полной проверки цепочки (`sslmode=verify-full`). Если файла нет — соединение идёт без явной настройки TLS (провайдер сам решает через параметры URL).
-
-## Деплой на Timeweb Cloud (App Platform)
-
-1. **База данных**: создайте кластер PostgreSQL в разделе «Базы данных» (регион — тот же, что у приложения; SSR у Next.js на Timeweb доступен только в Москве и Амстердаме). Скопируйте строку подключения по домену (не по голому IP — у Timeweb TLS маршрутизируется по SNI) с вкладки «Подключение» и сохраните корневой сертификат в `prisma/certs/timeweb-ca.crt`.
-2. **Приложение**: в App Platform подключите репозиторий, фреймворк — Next.js, включите SSR.
-   - Команда сборки: `npx prisma generate && npm run build`
-   - Команда запуска: `npx prisma migrate deploy && npm start`
-   - Переменные окружения: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST=true`
-3. При первом деплое миграции применятся автоматически. Сид демо-данными (`npm run db:seed`) запускается вручную одноразово (не как часть команды запуска — иначе демо-данные будут пересоздаваться при каждом перезапуске).
-
-## Скрипты
-
-| Команда            | Назначение              |
-|--------------------|-------------------------|
-| `npm run dev`      | Dev-сервер              |
-| `npm run build`    | Production-сборка       |
-| `npm run db:seed`  | Демо-данные             |
-| `npm run db:studio`| Prisma Studio           |
-| `npm run lint`     | ESLint                  |
-
-## Устранение проблем
-
-**Страница долго не открывается / зависает на «рендеринге» в dev-режиме.**
-Первый заход на каждый маршрут в `next dev` (Turbopack) компилируется по требованию — это нормально, обычно 1–5 сек. Если ощутимо дольше или в терминале видны ошибки вида `Cannot find module` / `Unexpected end of JSON input` — кэш Turbopack повреждён. Остановите сервер и очистите кэш:
+Через `/register` создаются заказчик и исполнитель. Исполнитель заполняет карточку компании; администратор подтверждает её перед отправкой откликов. Администратор создаётся отдельно:
 
 ```bash
-# остановить dev-сервер (Ctrl+C), затем
-rm -rf .next   # PowerShell: Remove-Item -Recurse -Force .next
-npm run dev
+php artisan dele:admin admin@example.com
 ```
 
-**Кнопка «Войти» / «Создать профиль» на лендинге не реагирует.**
-Если вы уже авторизованы (валидная cookie сессии), `proxy.ts` намеренно уводит с `/login` и `/register` в ваш кабинет, а не показывает форму — это ожидаемое поведение. Хедер лендинга отражает это: вместо «Войти» показывается меню с именем аккаунта и пунктом «Личный кабинет» / «Выйти».
+Команда дважды запрашивает пароль без отображения. Минимум 12 символов, максимум 72 байта; существующую учётную запись команда не меняет. На сервере:
+
+```bash
+sudo -u www-data php /srv/dele/current/artisan dele:admin ВАШ_EMAIL
+```
+
+Миграции создают структуру; `DatabaseSeeder` не добавляет демо-аккаунтов. Данные Timeweb не импортируются. Сохранены роли и кабинеты, объекты и оборудование, заявки, отклики, заказы и этапы, приёмка, сообщения, документы, рекомендации, технадзор, споры, модерация и журнал действий.
+
+Оплата остаётся демонстрационной. Настоящий эквайринг и SMTP не подключены. `/api/payments/webhook` выключен без `PAYMENT_WEBHOOK_SECRET`; при включении требует bearer-секрет длиной от 32 символов. Для реальной оплаты требуется отдельная интеграция с провайдером.
+
+## Проверки
+
+```bash
+php vendor/phpunit/phpunit/phpunit -c phpunit.xml
+npm run build
+```
+
+Feature-тесты проверяют вход, роли и владельца, цикл заявки и заказа, приёмку, демонстрационные платежи, рекомендации, технадзор, споры и изменения оборудования. По умолчанию используют SQLite in-memory; также проверены с PostgreSQL 17 и отдельной `dele_test`. **Никогда не запускать PHPUnit с рабочей БД:** тесты используют `RefreshDatabase`.
+
+`tests/browser-smoke.cjs` проверяет публичные страницы и кабинеты в Chromium. Требует Playwright Chromium, отдельного QA-приложения на `http://127.0.0.1:3108` и JSON-файла `SMOKE_FIXTURES`. Его создаёт `tests/browser-fixtures.php` только при `APP_ENV=testing` и `DB_DATABASE=dele_test`.
+
+## Fatmetal
+
+Debian 13, PHP 8.4-FPM, Nginx, PostgreSQL 17. База `dele` доступна локально через Unix-сокет. Пользователь `www-data` проходит peer-аутентификацию без сетевого пароля. QA использует отдельную `dele_test`.
+
+```text
+/srv/dele/current -> releases/<release>
+/srv/dele/releases/<release>/public   # единственный web root
+/srv/dele/shared/.env                # ключ и production-настройки
+/srv/dele/shared/storage             # сессии, логи, файлы между релизами
+/srv/dele/shared/backups             # копия БД перед миграциями
+```
+
+В `deploy/` находятся конфигурация Nginx и скрипты подготовки/обновления. `prepare.sh` предназначен для Debian с уже установленными пакетами, запускается root и не удаляет существующие базы.
+
+Для обновления собрать интерфейс локально, упаковать доверенный исходный код и `public/build`, исключив `.git`, `.env`, `vendor`, `node_modules`, `storage`, `public/hot`. Скопировать архив на сервер и проверить содержимое. Затем:
+
+```bash
+sudo bash /srv/dele/current/deploy/publish.sh /tmp/dele-release.tar.gz laravel-YYYYMMDD-HHMM
+```
+
+Скрипт создаёт новый релиз, устанавливает production-зависимости Composer, подключает общий `.env` и storage, сохраняет `pg_dump`, применяет миграции, кеширует Laravel, переключает симлинк и перезагружает PHP-FPM. Имя релиза должно быть новым. Использовать только собственные доверенные архивы.
+
+Для отката кода переключить `/srv/dele/current` на предыдущий релиз и перезагрузить `php8.4-fpm`. Изменения схемы этим не отменяются; восстановление данных требует отдельного решения и резервной копии.
+
+## HTTPS и обслуживание
+
+Доверенный короткоживущий сертификат Let's Encrypt выпущен на IPv4. Certbot установлен в `/opt/dele-certbot`; `dele-certbot-renew.timer` дважды в день запускает продление и reload Nginx. IPv6 не входит в сертификат. Домен покупать не требуется.
+
+```bash
+systemctl status nginx php8.4-fpm postgresql
+systemctl list-timers dele-certbot-renew.timer
+sudo /opt/dele-certbot/bin/certbot certificates
+curl --fail https://176.118.222.21/up
+sudo tail -n 50 /srv/dele/shared/storage/logs/laravel.log
+```
+
+Сервисы и таймер включены в автозапуск. `APP_DEBUG=false`, HTTPS-cookie, закрытые dotfiles и ограниченный PHP entrypoint настроены на сервере. Резервные копии вне сервера, SMTP и платёжные секреты настраиваются отдельно при необходимости.

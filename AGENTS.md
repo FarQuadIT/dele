@@ -1,5 +1,7 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# DELE Laravel
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+Laravel 13 / PHP 8.4, Inertia 2, React 19 and PostgreSQL.
+Frontend: resources/js. Backend: app, routes and database.
+Run npm run build and php vendor/phpunit/phpunit/phpunit -c phpunit.xml.
+Never run tests against the application database: use SQLite :memory: or the dedicated dele_test PostgreSQL database.
+Do not seed shared demo users or touch Timeweb resources.

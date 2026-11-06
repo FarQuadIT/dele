@@ -1,0 +1,5 @@
+[Unit]
+Description=Renew DELE IP TLS certificate
+[Service]
+Type=oneshot
+ExecStart=/opt/dele-certbot/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
