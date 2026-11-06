@@ -2,8 +2,10 @@
 set -euo pipefail
 test "$(id -u)" = 0
 nginx -t
-systemctl is-active nginx php8.4-fpm postgresql dele-certbot-renew.timer
-systemctl is-enabled nginx php8.4-fpm postgresql dele-certbot-renew.timer
+for service in nginx php8.4-fpm postgresql postgresql@17-main dele-certbot-renew.timer; do
+  systemctl is-active "$service"
+  systemctl is-enabled "$service"
+done
 curl --fail --silent --show-error --output /dev/null https://176.118.222.21/
 curl --fail --silent --show-error --output /dev/null https://176.118.222.21/up
 test "$(curl --silent --output /dev/null --write-out '%{http_code}' https://176.118.222.21/.env)" = 403
