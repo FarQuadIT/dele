@@ -146,8 +146,8 @@ export function HeroSection() {
         Цифровое управление инженерными системами объекта
       </p>
       <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl xl:text-6xl">
-        Все системы вашего дома — под&nbsp;контролем.
-        <span className="text-primary"> Без папок, звонков и авралов.</span>
+        Дом в порядке.
+        <span className="text-primary"> Вы спокойны.</span>
       </h1>
       <p className="max-w-lg text-pretty text-base text-muted-foreground sm:text-lg">
         Храните документы и сведения об оборудовании, следите за сроками
